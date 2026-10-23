@@ -65,14 +65,15 @@ const slides: Slide[] = [
     title:'Ripple 源码阅读与可靠性分析', layout:'cover',
     body:<div className="cover-content">
       <img className="cover-art" src={`${import.meta.env.BASE_URL}images/slime-cover-cutout.png`} alt="绿色史莱姆站在草地上" />
-      <div className="cover-copy"><p className="cover-name">Ripple</p><h1>一项配置更新<br />如何到达每张地图</h1><p className="cover-subtitle">源码阅读与可靠性分析</p><p className="cover-credit">面向对象程序设计课程汇报<br />盛泽辰</p></div>
+      <div className="cover-copy"><p className="cover-name">Ripple 源码阅读</p><h1>一项配置更新<br />如何到达每张地图</h1><p className="cover-subtitle">源码阅读与可靠性分析</p><p className="cover-credit">面向对象程序设计课程汇报<br />盛泽辰</p></div>
     </div>,
   },
   {
     title:'三个地图进程共享一项配置', heading:'从一项游戏配置开始', layout:'scene-page',
     body:<div className="page-body">
-      <p>网络游戏由多个进程协作运行。登录进程处理账号与连接，地图进程负责移动、怪物生成和战斗，需要保存的数据交给数据服务。玩家数量增加后，这些进程可以分布在不同机器上，通过网络交换消息。</p>
-      <p>这里关注森林、海洋、高山三个地图进程。它们都会生成史莱姆，生成时读取基础生命值 <strong>100</strong>。每个进程都有自己的内存和本地状态；即使使用同一个配置键，修改森林一侧的数据，海洋和高山也不会自动跟着改变。</p>
+      <p>假设你正在运营一款网络游戏，它的服务端由多个进程协作运行。登录进程处理账号与连接，地图进程负责移动、怪物生成和战斗，需要保存的数据交给数据服务。玩家数量增加后，这些进程可以分布在不同机器上，通过网络交换消息。</p>
+      <p>这里关注森林、海洋、高山三个地图所在的服务端进程。它们都会生成史莱姆，生成时读取同一项怪物配置，将基础生命值设为 <strong>100</strong>。同一个数值会在多个进程中被使用。</p>
+      <p>三个地图进程各自拥有独立的内存和本地状态。之后修改森林一侧的配置，需要通过网络把变化送到海洋和高山，再由各自的游戏逻辑读取并使用。这条更新路径，就是接下来引入 Ripple 的起点。</p>
       <Worlds hp />
     </div>,
   },
@@ -83,6 +84,7 @@ const slides: Slide[] = [
       <div className="value-change"><span className="config-key">game / slime.baseHp</span><div><span className="old-value">100</span><span className="value-to">改为</span><strong>200</strong></div></div>
       <p>如果配置保存在各个进程的本地文件中，就需要逐台修改并重新加载；只在启动时读取配置的程序，还需要安排重启。地图实例越多，这次调整需要协调的文件和加载时机也越多。</p>
       <p>当森林已经改成 200、海洋还停在 100 时，两张地图新生成的史莱姆就有了不同的生命值。我们因此引入配置分发系统：管理端提交一次修改，由它保存新值、找到接收者，再把更新送到各个地图进程。</p>
+      <p>地图进程仍然负责生成怪物，但配置更新有了统一的提交入口。接下来需要明确两件事：系统怎样知道哪些地图使用这项配置，以及一次修改如何从这个入口到达它们。</p>
     </div>,
   },
   {
@@ -92,24 +94,26 @@ const slides: Slide[] = [
       <div className="config-focus"><span>应用名 <code>game</code></span><span>配置键 <code>slime.baseHp</code></span></div>
       <p>这次登记就是<strong>订阅</strong>。管理端向同一应用名和配置键写入字符串 <code>200</code>，就是一次<strong>发布</strong>。系统根据这两个标识查找已登记的接收者，把这次修改送过去；地图进程取得新值后，再用它生成史莱姆。</p>
       <p>森林地图增加新实例时，新实例也来登记订阅。管理端仍然只提交配置键和新值，接收地址由配置系统维护。这样，发布一次修改的操作可以保持不变，接收者则随着地图实例的增减而变化。</p>
+      <p>接收者增多后，配置系统还要承担更多发送工作。Ripple 将部分发送交给其他 Ripple服务端和 Ripple客户端继续完成；后面会沿一条具体路径，查看这些对象各自接手了哪一步。</p>
     </div>,
   },
   {
     title:'Ripple 的作用与一次更新的参与者', heading:'走进 Ripple', layout:'architecture-page',
     body:<div className="page-body">
-      <p>Ripple 是面向大规模集群的发布订阅系统。在这个场景里，管理端通过 <strong>Ripple客户端 C1</strong> 写入配置；地图进程通过各自的 Ripple客户端订阅和读取配置。</p>
+      <p>Ripple 是面向大规模集群的发布订阅系统，提供配置写入、读取、删除、增量更新和订阅等操作。在这个场景里，管理端通过 <strong>Ripple客户端 C1</strong> 写入配置；地图进程通过各自的 Ripple客户端订阅和读取配置。</p>
       <p>Ripple服务端接收请求、保存消息，再把消息传给其他 Ripple服务端和已订阅的 Ripple客户端。下面用 A 表示接收写入的 Ripple服务端，用 B 表示这次选定的同步目标。</p>
       <Route />
       <p>森林地图中的 <strong>Ripple客户端 C2</strong> 接收并保存更新后，游戏逻辑读取新值，用它生成后续的史莱姆。接下来就沿着 C1、A、B、C2 这条路径，依次查看写入、保存、同步和订阅通知的代码。</p>
+      <p>这里设定 C1 连接 A，C2 连接 B。RippleClient 会缓存配置项到 Ripple服务端的映射；首次访问没有映射时，由 NodeSelector 选择目标。随后，同一配置项的操作复用这个连接选择。</p>
     </div>,
   },
   {
     title:'Node 与协作对象', layout:'objects-page',
     body:<div className="page-body">
-      <p>C1 的操作入口是 <code>RippleClient</code>，位于 <code>ripple-client</code>；A、B 上协调请求的是 <code>Node</code>，位于 <code>ripple-server</code>。</p>
+      <p>C1 的操作入口是 <code>RippleClient</code>，位于 <code>ripple-client</code>；A、B 上协调请求的是 <code>Node</code>，位于 <code>ripple-server</code>。两侧共用的配置项、消息、协议和存储接口放在 <code>ripple-common</code> 中。</p>
       <p>Node 收到更新后，通过 Storage 保存消息，通过 Overlay 计算同步目标，通过 ClientDispatcher 通知订阅者。读取时由 Resolver 合并消息，Tracker 与 Worker 则处理同步进度和重试。</p>
       <div className="object-map"><NodeMap /></div>
-      <p className="compact-copy">例如，把 Overlay 的实现从星型换成树形，Node 仍调用同一个 <code>calculateNodesToSync()</code> 接口，具体发送给谁由所选策略决定。阅读源码时，可以先跟踪 Node 的调用顺序，再进入各个实现，确认它们接收什么数据、返回什么结果。</p>
+      <p className="compact-copy">以 Overlay 为例，星型实现让源节点向其他 Ripple服务端发送，树形实现返回当前节点的子节点，哈希实现则根据配置项选择候选节点。Node 始终调用 <code>calculateNodesToSync()</code>，发送目标随实现变化。后文设定 B 已被选入目标，再跟踪发送与确认。</p>
     </div>,
   },
   {
@@ -117,9 +121,10 @@ const slides: Slide[] = [
     body:<div className="page-body">
       <p>C1 调用下面的接口，向 A 异步发送写入请求。A 上的 <code>PutRequestHandler</code> 取出应用名、配置键和新值，再调用 <code>Node.put()</code>。</p>
       <Code file="RippleClient.put()" code={'put("game", "slime.baseHp", "200");'} />
-      <p>Node 为这次修改创建一条 UpdateMessage，其中包括值、时间、UUID 和源节点编号。SQLite 保存配置身份与消息历史；读取当前值时，Resolver 再从历史中选择消息。</p>
+      <p>Node 为这次修改创建一条 UpdateMessage，其中包括值、时间、UUID 和源节点编号。SQLite 的 item 表登记应用名与配置键，message 表保存更新内容。同一配置项可以对应多条消息，读取当前值时再由 Resolver 从历史中选择。</p>
       <div className="message-history"><p><span>较早的全量消息</span><code>value = 100</code></p><p className="current-message"><span>较新的全量消息</span><code>value = 200</code></p></div>
       <p>这里选中的是较新的全量消息，因此 <code>Item.value</code> 被赋为 <strong>200</strong>。原来值为 100 的消息仍属于历史记录。消息的 UUID 则标识这一次修改：同一条更新在节点间传播时，重复检查和同步进度都围绕这个 UUID 进行。</p>
+      <p>Item 的相等判断只使用应用名和配置键。因此，从 100 改成 200 后，订阅表仍能用同一个配置身份找到接收者；具体读到哪个值，则取决于该配置身份下保存的消息。</p>
     </div>,
   },
   {
@@ -136,22 +141,25 @@ const slides: Slide[] = [
     }
 });
 return Result.SUCCESS;`} />
-      <p><code>submit()</code> 后紧接着返回 <code>SUCCESS</code>，代码没有等待任务结束。C1 收到 A 的成功响应时，B 可能已保存更新，也可能还没收到消息。要知道这次修改是否继续送达，接下来还需要跟踪后台任务和它记录的同步进度。</p>
+      <p><code>submit()</code> 后紧接着返回 <code>SUCCESS</code>。Node.put() 把它转成 true，PutRequestHandler 将它写入成功响应并发回 C1。另一边，后台任务通过 Overlay 找到 B，向它发送 SyncRequest。</p>
+      <p>B 收到请求后进入自己的 <code>propagateMessage()</code>，保存消息并通知订阅者。这两条执行路径独立推进，所以 C1 收到响应时，B 的处理可能已经完成，也可能仍在等待消息。接下来先沿正常到达 B 的路径继续往下看。</p>
     </div>,
   },
   {
     title:'从 Ripple服务端通知到组内转发', layout:'dispatch-page',
     body:<div className="page-body">
-      <p>B 保存更新后，查询此前登记的订阅关系。假设有六个 Ripple客户端订阅了这项配置，默认的分发器会先排序，再把它们分成三个组。</p>
-      <p>假设森林地图的 C2 和海洋地图的 C3 同在一组，且 C2 排在前面。分发器用 <code>list.get(0)</code> 取出 C2，向它发送 Dispatch，并把 C3 留在待转发成员列表里。</p>
+      <p>森林地图中的 C2、海洋地图中的 C3，此前都向 B 订阅了 <code>game / slime.baseHp</code>。Node.subscribe() 将配置项与它们的回调地址、端口关联起来。B 保存更新后，就用这张订阅表找到接收者。</p>
+      <p>假设 B 上有六个 Ripple客户端订阅了这项配置。默认分发器先排序，再分成三个组；其中 C2、C3 同组，C2 排在前面。分发器用 <code>list.get(0)</code> 取出 C2，向它发送 Dispatch，并把 C3 留在待转发成员列表里。</p>
       <Route group />
       <p>C2 先把更新交给本地存储，取得组内成员列表后，再向 C3 发送 Sync。这一组的两次传输分别由 B 和 C2 完成。B 直接发送的目标减少了，C3 取得更新则需要 C2 继续转发；走完这一步，海洋地图才有这次修改对应的消息。</p>
+      <p>如果 C2 还没有缓存成员列表，就先按 Dispatch 中的列表标识向 Ripple服务端请求地址，同时暂存这条消息。GetClientListResponseHandler 收到列表后，再取出暂存消息继续发送。</p>
     </div>,
   },
   {
-    title:'Tracker 怎样筛选待重试目标', heading:'同步如何被记为完成', layout:'tracker-page',
+    title:'问题分析 · 同步进度与重试', heading:'问题分析', layout:'tracker-page',
     body:<div className="page-body">
-      <p>如果 A 发给 B 的更新没有送达，B 仍保留 100。Ripple 为每条更新记录目标节点和已确认节点，后台 Worker 周期性调用 Tracker 重试。</p>
+      <p>前面已经把更新从管理端跟踪到海洋地图。现在回到 A 向 B 发送的那一步：如果传输失败，B 仍保留 100，A 就需要记住这次发送尚未完成，随后继续补发。</p>
+      <p>Tracker.initProgress() 从 Overlay 取得需要确认的 Ripple服务端编号，建立目标列表并记录 A 自己的确认。后台 Worker 周期性调用 Tracker.retry()，下面的条件决定哪些目标还需要发送。</p>
       <Code file="Tracker.getNodesToRetry()" hl={[2,3]} code={`for (Integer id : ack.getNodeList()) {
     if (!ack.getAckNodes().contains(id)) {
         ret.add(id);
@@ -173,7 +181,31 @@ this.getTracker().recordAck(
     </div>,
   },
   {
-    title:'增量消息如何使用基消息', heading:'增量更新依赖历史', layout:'incremental-page',
+    title:'一次漏收之后的恢复 · 组内转发中断', layout:'recovery-page',
+    body:<div className="page-body">
+      <p>继续沿同一条传播路径往下看。这次 A 已把生命值 200 送到 B，B 也把它交给了森林地图的 Ripple客户端 C2。C2 保存消息并安排转发，但森林地图进程在向 C3 发出消息前退出，海洋地图就仍然使用 100。</p>
+      <p>DispatchRequestHandler 在成员列表已缓存的分支中创建线程池，提交向组内成员发送的任务，然后调用 <code>pool.shutdown()</code>。这一步让已提交的任务继续运行；处理器随后将 DispatchResponse 的 success 设为 true，返回路径没有等待 C3 保存完成。</p>
+      <Code file="DispatchRequestHandler.handle() · 返回响应" code={`DispatchResponse dispatchResponse = new DispatchResponse();
+dispatchResponse.setUuid(dispatchRequest.getUuid());
+dispatchResponse.setSuccess(true);`} />
+      <p>B 收到这个响应后，DispatchResponseHandler 只记录日志。前面看到的 Tracker 列表来自 Ripple服务端的 Overlay，其中没有 C3 的接收状态。因此，C2 退出后，现有重试流程无法从这张列表中找出漏收的 C3。</p>
+      <p>现在游戏里已经出现一个具体差异：B 保存了 200，海洋地图仍按 100 生成史莱姆。接下来让 B 也经历一次离线与重启，继续观察重新建立连接以后，这个差异怎样得到处理。</p>
+    </div>,
+  },
+  {
+    title:'一次漏收之后的恢复 · 重启后的数据与订阅', layout:'recovery-page',
+    body:<div className="page-body">
+      <p>B 离线期间，管理端又通过 A 发布了 250、300、350、400 等后续调整。B 的数据库仍停在此前保存的 200，海洋地图的 C3 仍停在漏收前的 100。B 重启后，数据恢复要先从这两个不同的旧值出发。</p>
+      <Code file="Node.initCluster() · 后台工作与连接启动" code={`this.setWorkingThread(new Thread(this.getWorker()));
+this.getWorkingThread().start();
+this.reconnect(nodeList);`} />
+      <p>Worker 会重连、检查健康状态并调用 Tracker.retry()。Tracker 从本地 ACK 表找出尚需发送的目标，再按 UUID 取出消息。这条启动与后台路径没有向同伴比较配置历史的步骤；B 得到后续更新，仍依赖 A 保留相应消息和待重试进度。</p>
+      <p>A 的历史回收会删除旧消息，并清除对应 ACK。被删除的那次更新随之退出补发任务；仍保留的后续全量消息若成功到达 B，可以让 B 取得新值。恢复能继续到哪一步，取决于这些消息是否还在、B 是否仍被列为待重试目标。</p>
+      <p>更新到达 B 后，还需要继续送往 C3。Node 构造时重新创建空的内存订阅表，C3 必须重新登记，B 才能按表向它推送。于是，前一页的漏收故事一直延伸到重启之后：连接恢复、数据补齐、订阅恢复，分别由不同代码处理，C3 最终取得新值需要把这些步骤重新接起来。</p>
+    </div>,
+  },
+  {
+    title:'增量消息如何使用基消息', layout:'incremental-page',
     body:<div className="page-body">
       <p>再看一项配置 <code>game / slime.spawnMaps</code>，它记录哪些地图允许生成史莱姆。管理端先发布全量消息 M1，之后希望把高山地图加入列表。</p>
       <div className="message-spec"><p><strong>M1</strong><span>全量消息</span><code>森林地图,海洋地图</code></p><p><strong>M2</strong><span>以 M1 为基消息</span><code>add_entry ",高山地图"</code></p></div>
@@ -196,17 +228,29 @@ this.getTracker().recordAck(
     </div>,
   },
   {
-    title:'回到游戏中的两种结果', layout:'closing-page',
+    title:'读取配置时承担的历史维护', layout:'maintenance-page',
+    body:<div className="page-body">
+      <p>历史回收还会影响一次普通读取。假设现在通过 Ripple服务端的 <code>Node.getWithValue()</code> 查看史莱姆配置：它先取得 Item，再查询消息历史，最后交给 Resolver 计算值。进入两个存储方法，就能看到读取开始之前发生了什么。</p>
+      <Code file="SqliteItemService.getItem() 与 SqliteMessageService.findMessages() · 两处相同调用" code={`// TODO: Is it necessary to trigger recycling here
+this.getStorage().getRecycleStrategy().recycle(applicationName, key);`} />
+      <p><code>getItem()</code> 在查询配置身份前清理一次，<code>findMessages()</code> 在读取历史前又清理一次。每次 recycle() 都会查询回收前的 UUID、查询最近消息以确定时间边界、执行删除，再查询剩余 UUID，并为删除的消息清理 ACK。</p>
+      <p>因此，调用方只是要读出当前配置，却必须先等待这些维护操作。同一次读取还会重复进入清理流程；即使期间没有新增消息，也仍要重新查询和判断。这里的成本随读取请求产生，而调用方无法单独选择何时执行历史清理。</p>
+      <p>这也使读取带上了修改历史的副作用：前面 M1 被删除的过程，就可能发生在取值之前。写入路径同样会先调用 getItem()，所以它也承担清理工作。问题落在这组具体职责上：查询配置身份、取得历史和决定删除时机，被放进了同一条同步调用链。</p>
+    </div>,
+  },
+  {
+    title:'从一次更新看对象之间的协作', layout:'closing-page',
     body:<div className="page-body">
       <p>回到最初的游戏场景。管理端只提交一次生命值 200，Ripple 将它保存成消息，再通过 Ripple服务端之间的同步和 Ripple客户端之间的转发，逐步送到使用这项配置的地图进程。</p>
-      <p>沿着这条路径，第一处问题出现在发送与确认之间。A 提交发送后立即记录 B 的确认；如果消息随后没有到达 B，B 仍然保留 100，而 Tracker 又会因为这个确认跳过 B。此时需要核对的是<strong>进度记录与实际接收结果是否一致</strong>。</p>
-      <p>第二处问题出现在历史回收与读取之间。地图列表的最新消息 M4 已经保存，但它引用的全量消息 M1 被删除。Resolver 找不到基消息，也就无法拼出完整列表。此时需要核对的是<strong>保留下来的历史是否足够重建当前值</strong>。</p>
-      <p>从对象协作来看，Node 把发送、进度记录、存储和合并交给了不同对象。逐个阅读这些方法后，还要把它们串回同一次更新：谁产生确认，谁使用确认；谁删除历史，谁又需要这段历史。这两处调用关系，就是本次源码阅读中最值得继续分析的地方。</p>
+      <p>A 提交发送就记录 B 的确认，Tracker 随后用这个记录筛掉重试目标。B 将消息交给 C2 后，C3 的接收结果又没有进入这份进度。把两段代码连起来，才能看出为什么一次更新已经向下传播，海洋地图却仍可能停在旧值。</p>
+      <p>重启使这条路径更长：Ripple服务端重新连接后，需要依靠仍保留的消息和进度补发，再恢复订阅登记，才能继续通知地图进程。这里每一步使用的数据，都来自前面另一个对象保存的状态。</p>
+      <p>历史回收也存在这样的联系。Resolver 读取 M4 时需要 M1，回收策略却只按时间选择记录；而执行回收的入口又放在 getItem() 和 findMessages() 中，让一次读取同时承担重复清理和删除历史的工作。</p>
+      <p>源码已经用 Storage、Overlay、ClientDispatcher、Tracker 和 Resolver 拆分了职责。沿同一条配置更新检查它们的调用关系，可以具体看到：发送结果是否进入进度、漏收是否留下补发依据、删除是否保留读取依赖，以及维护工作由哪一次操作承担。</p>
     </div>,
   },
   {
     title:'致谢', layout:'thanks-page',
-    body:<div className="thanks-content"><p className="thanks-kicker">Ripple · 源码阅读与可靠性分析</p><h1>感谢聆听</h1><p className="thanks-invitation">欢迎提问与交流</p><p className="thanks-credit">盛泽辰 · 面向对象程序设计</p></div>,
+    body:<div className="thanks-content"><p className="thanks-kicker">Ripple · 源码阅读与可靠性分析</p><h1>感谢聆听</h1></div>,
   },
 ];
 
