@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 
 const PAL = { ink:'#141821', muted:'#5e6778', line:'#9ca4b4', surface:'#ffffff', accent:'#1d4ed8', accentSoft:'#e8effd', accentInk:'#173da6' };
 
@@ -6,7 +7,7 @@ function Code({ file, code, hl=[] }: {file:string; code:string; hl?:number[]}) {
   return <div className="code-panel"><div className="code-caption">{file}</div><pre>{code.split('\n').map((line,i)=><span key={i} className={`code-line ${hl.includes(i+1)?'highlight':''}`}>{line||' '}</span>)}</pre></div>;
 }
 function Worlds({hp=false}: {hp?:boolean}) {
-  return <figure className="worlds"><img src="/images/slime-worlds-cutout.png" alt="森林、海洋、高山三张地图中的史莱姆" /><figcaption>{['森林地图','海洋地图','高山地图'].map(name=><span key={name}>{name}{hp&&<small>基础生命值 100</small>}</span>)}</figcaption></figure>;
+  return <figure className="worlds"><img src={`${import.meta.env.BASE_URL}images/slime-worlds-cutout.png`} alt="森林、海洋、高山三张地图中的史莱姆" /><figcaption>{['森林地图','海洋地图','高山地图'].map(name=><span key={name}>{name}{hp&&<small>基础生命值 100</small>}</span>)}</figcaption></figure>;
 }
 function Route({group=false}:{group?:boolean}) {
   const nodes=group ? [
@@ -63,15 +64,15 @@ const slides: Slide[] = [
   {
     title:'Ripple 源码阅读与可靠性分析', layout:'cover',
     body:<div className="cover-content">
-      <img className="cover-art" src="/images/slime-cover-cutout.png" alt="绿色史莱姆站在草地上" />
+      <img className="cover-art" src={`${import.meta.env.BASE_URL}images/slime-cover-cutout.png`} alt="绿色史莱姆站在草地上" />
       <div className="cover-copy"><p className="cover-name">Ripple</p><h1>一项配置更新<br />如何到达每张地图</h1><p className="cover-subtitle">源码阅读与可靠性分析</p><p className="cover-credit">面向对象程序设计课程汇报<br />盛泽辰</p></div>
     </div>,
   },
   {
     title:'三个地图进程共享一项配置', heading:'从一项游戏配置开始', layout:'scene-page',
     body:<div className="page-body">
-      <p>网络游戏由多个进程协作运行。登录进程处理账号与连接，地图进程负责移动、怪物生成和战斗，需要保存的数据交给数据服务。</p>
-      <p>森林、海洋、高山三个地图都会生成史莱姆，初始基础生命值都是 <strong>100</strong>。三个进程各自持有配置，修改森林一侧的数据，海洋和高山不会自动跟着改变。</p>
+      <p>网络游戏由多个进程协作运行。登录进程处理账号与连接，地图进程负责移动、怪物生成和战斗，需要保存的数据交给数据服务。玩家数量增加后，这些进程可以分布在不同机器上，通过网络交换消息。</p>
+      <p>这里关注森林、海洋、高山三个地图进程。它们都会生成史莱姆，生成时读取基础生命值 <strong>100</strong>。每个进程都有自己的内存和本地状态；即使使用同一个配置键，修改森林一侧的数据，海洋和高山也不会自动跟着改变。</p>
       <Worlds hp />
     </div>,
   },
@@ -80,8 +81,8 @@ const slides: Slide[] = [
     body:<div className="page-body">
       <p>现在，管理端希望把史莱姆的基础生命值改成 <strong>200</strong>，让三个地图后续生成的史莱姆都使用新值。</p>
       <div className="value-change"><span className="config-key">game / slime.baseHp</span><div><span className="old-value">100</span><span className="value-to">改为</span><strong>200</strong></div></div>
-      <p>如果配置保存在各个进程的本地文件中，就需要逐台修改并重新加载；只在启动时读取配置的程序，还需要安排重启。</p>
-      <p>当森林已经改成 200、海洋还停在 100 时，同一次数值调整就产生了两种结果。因此，我们需要一个系统接收这次修改，并把更新送到使用它的进程。</p>
+      <p>如果配置保存在各个进程的本地文件中，就需要逐台修改并重新加载；只在启动时读取配置的程序，还需要安排重启。地图实例越多，这次调整需要协调的文件和加载时机也越多。</p>
+      <p>当森林已经改成 200、海洋还停在 100 时，两张地图新生成的史莱姆就有了不同的生命值。我们因此引入配置分发系统：管理端提交一次修改，由它保存新值、找到接收者，再把更新送到各个地图进程。</p>
     </div>,
   },
   {
@@ -89,8 +90,8 @@ const slides: Slide[] = [
     body:<div className="page-body">
       <p>配置系统收到 <strong>200</strong> 后，首先要知道哪些进程在使用这项配置。森林、海洋地图提前登记自己的接收地址，并说明它们关心的是哪一项配置。</p>
       <div className="config-focus"><span>应用名 <code>game</code></span><span>配置键 <code>slime.baseHp</code></span></div>
-      <p>这次登记就是<strong>订阅</strong>。管理端向同一配置键提交新值，就是一次<strong>发布</strong>。系统查找已登记的接收者，再把修改送过去。</p>
-      <p>森林地图增加新实例时，新实例也来登记订阅。管理端仍然只提交一次修改，接收地址由配置系统维护。</p>
+      <p>这次登记就是<strong>订阅</strong>。管理端向同一应用名和配置键写入字符串 <code>200</code>，就是一次<strong>发布</strong>。系统根据这两个标识查找已登记的接收者，把这次修改送过去；地图进程取得新值后，再用它生成史莱姆。</p>
+      <p>森林地图增加新实例时，新实例也来登记订阅。管理端仍然只提交配置键和新值，接收地址由配置系统维护。这样，发布一次修改的操作可以保持不变，接收者则随着地图实例的增减而变化。</p>
     </div>,
   },
   {
@@ -99,7 +100,7 @@ const slides: Slide[] = [
       <p>Ripple 是面向大规模集群的发布订阅系统。在这个场景里，管理端通过 <strong>Ripple客户端 C1</strong> 写入配置；地图进程通过各自的 Ripple客户端订阅和读取配置。</p>
       <p>Ripple服务端接收请求、保存消息，再把消息传给其他 Ripple服务端和已订阅的 Ripple客户端。下面用 A 表示接收写入的 Ripple服务端，用 B 表示这次选定的同步目标。</p>
       <Route />
-      <p>森林地图中的 <strong>Ripple客户端 C2</strong> 接收更新后，游戏逻辑读取新值，用它生成后续的史莱姆。</p>
+      <p>森林地图中的 <strong>Ripple客户端 C2</strong> 接收并保存更新后，游戏逻辑读取新值，用它生成后续的史莱姆。接下来就沿着 C1、A、B、C2 这条路径，依次查看写入、保存、同步和订阅通知的代码。</p>
     </div>,
   },
   {
@@ -108,7 +109,7 @@ const slides: Slide[] = [
       <p>C1 的操作入口是 <code>RippleClient</code>，位于 <code>ripple-client</code>；A、B 上协调请求的是 <code>Node</code>，位于 <code>ripple-server</code>。</p>
       <p>Node 收到更新后，通过 Storage 保存消息，通过 Overlay 计算同步目标，通过 ClientDispatcher 通知订阅者。读取时由 Resolver 合并消息，Tracker 与 Worker 则处理同步进度和重试。</p>
       <div className="object-map"><NodeMap /></div>
-      <p className="compact-copy">例如，把 Overlay 的实现从星型换成树形，Node 仍调用同一个 <code>calculateNodesToSync()</code> 接口；具体发送给谁，由所选策略决定。</p>
+      <p className="compact-copy">例如，把 Overlay 的实现从星型换成树形，Node 仍调用同一个 <code>calculateNodesToSync()</code> 接口，具体发送给谁由所选策略决定。阅读源码时，可以先跟踪 Node 的调用顺序，再进入各个实现，确认它们接收什么数据、返回什么结果。</p>
     </div>,
   },
   {
@@ -118,13 +119,13 @@ const slides: Slide[] = [
       <Code file="RippleClient.put()" code={'put("game", "slime.baseHp", "200");'} />
       <p>Node 为这次修改创建一条 UpdateMessage，其中包括值、时间、UUID 和源节点编号。SQLite 保存配置身份与消息历史；读取当前值时，Resolver 再从历史中选择消息。</p>
       <div className="message-history"><p><span>较早的全量消息</span><code>value = 100</code></p><p className="current-message"><span>较新的全量消息</span><code>value = 200</code></p></div>
-      <p>这里选中的是较新的全量消息，因此 <code>Item.value</code> 被赋为 <strong>200</strong>。后续检查重复消息和记录同步进度，都使用这条消息的 UUID。</p>
+      <p>这里选中的是较新的全量消息，因此 <code>Item.value</code> 被赋为 <strong>200</strong>。原来值为 100 的消息仍属于历史记录。消息的 UUID 则标识这一次修改：同一条更新在节点间传播时，重复检查和同步进度都围绕这个 UUID 进行。</p>
     </div>,
   },
   {
     title:'成功响应与后台同步', layout:'response-page',
     body:<div className="page-body">
-      <p>A 完成本地处理后，把同步任务提交到线程池，随后返回 <code>SUCCESS</code>。下面是 <code>Node.propagateMessage()</code> 中这段代码。</p>
+      <p>A 在 <code>Node.propagateMessage()</code> 中检查消息是否重复、写入本地存储、初始化同步进度并通知订阅者，随后把向其他 Ripple服务端同步的任务提交到线程池。</p>
       <Code file="Node.propagateMessage()" hl={[1,10]} code={`this.getExecutorService().submit(new Callable<Void>() {
     @Override
     public Void call() throws Exception {
@@ -135,7 +136,7 @@ const slides: Slide[] = [
     }
 });
 return Result.SUCCESS;`} />
-      <p>代码没有等待这个任务结束。C1 收到 A 的成功响应时，B 可能已保存更新，也可能还没收到消息；这条响应路径没有把 B 的保存结果作为返回成功的条件。</p>
+      <p><code>submit()</code> 后紧接着返回 <code>SUCCESS</code>，代码没有等待任务结束。C1 收到 A 的成功响应时，B 可能已保存更新，也可能还没收到消息。要知道这次修改是否继续送达，接下来还需要跟踪后台任务和它记录的同步进度。</p>
     </div>,
   },
   {
@@ -144,7 +145,7 @@ return Result.SUCCESS;`} />
       <p>B 保存更新后，查询此前登记的订阅关系。假设有六个 Ripple客户端订阅了这项配置，默认的分发器会先排序，再把它们分成三个组。</p>
       <p>假设森林地图的 C2 和海洋地图的 C3 同在一组，且 C2 排在前面。分发器用 <code>list.get(0)</code> 取出 C2，向它发送 Dispatch，并把 C3 留在待转发成员列表里。</p>
       <Route group />
-      <p>C2 先把更新交给本地存储，再向 C3 发送 Sync。这一组的两次传输分别由 B 和 C2 完成；C3 取得更新后，海洋地图才有这次修改对应的消息。</p>
+      <p>C2 先把更新交给本地存储，取得组内成员列表后，再向 C3 发送 Sync。这一组的两次传输分别由 B 和 C2 完成。B 直接发送的目标减少了，C3 取得更新则需要 C2 继续转发；走完这一步，海洋地图才有这次修改对应的消息。</p>
     </div>,
   },
   {
@@ -156,8 +157,8 @@ return Result.SUCCESS;`} />
         ret.add(id);
     }
 }`} />
-      <p>B 在目标列表中、却不在已确认列表中时，才会进入待重试集合。一旦写入 B 的确认，下一轮检查就会跳过它。</p>
-      <p>因此，要判断失败后是否还会补发，需要继续查看 <strong>B 的确认是在什么时候写进去的</strong>。</p>
+      <p>这里的两个列表属于同一条更新消息。目标列表记录需要收集确认的节点，已确认列表记录代码已经记下的节点编号。B 在目标列表中、却不在已确认列表中时，才会被加入 <code>ret</code>，进入待重试集合。</p>
+      <p>一旦写入 B 的确认，下一轮检查就会跳过它，即使 B 仍在使用 100。因此，要判断失败后是否还会补发，需要继续查看 <strong>B 的确认是在什么时候写进去的</strong>。</p>
     </div>,
   },
   {
@@ -167,8 +168,8 @@ return Result.SUCCESS;`} />
       <Code file="Node.doSyncWithServer() · 省略中间日志" hl={[1,2,3]} code={`Api.sync(channel, message);
 this.getTracker().recordAck(
     message.getUuid(), message.getLastUpdateServerId(), nodeMetadata.getId());`} />
-      <p><code>Api.sync()</code> 只调用 <code>channel.writeAndFlush()</code> 发出请求，没有等 B 保存消息。B 返回的 SyncResponse 在处理器中只输出日志，没有用来更新 Tracker。</p>
-      <div className="failure-state"><span>如果传输随后失败</span><strong>B 仍是 100</strong><span>但 A 已记录 B 的确认，下一轮重试会跳过 B。</span></div>
+      <p><code>Api.sync()</code> 调用 <code>channel.writeAndFlush()</code> 后返回，没有等待发送完成或 B 保存消息。紧接着的 <code>recordAck()</code> 就把 B 的编号记进同步进度。B 返回的 SyncResponse 在处理器中只输出日志，没有用来更新 Tracker。</p>
+      <div className="failure-state"><span>假设发送已提交，但消息在到达 B 之前传输失败</span><strong>B 仍是 100</strong><span>A 已把 B 记为已确认节点。下一轮重试检查列表时会跳过 B，这条补发路径因此没有再次发送 200。</span></div>
     </div>,
   },
   {
@@ -176,32 +177,36 @@ this.getTracker().recordAck(
     body:<div className="page-body">
       <p>再看一项配置 <code>game / slime.spawnMaps</code>，它记录哪些地图允许生成史莱姆。管理端先发布全量消息 M1，之后希望把高山地图加入列表。</p>
       <div className="message-spec"><p><strong>M1</strong><span>全量消息</span><code>森林地图,海洋地图</code></p><p><strong>M2</strong><span>以 M1 为基消息</span><code>add_entry ",高山地图"</code></p></div>
-      <p>M2 只带追加的内容，以及 M1 的 UUID。读取时，Resolver 选出较新的 M2，按 UUID 找到 M1，再拼接两段字符串。</p>
+      <p>M2 只带追加的内容，以及 M1 的 UUID。读取时，Resolver 选出较新的 M2，按 UUID 找到 M1。源码中的 <code>add_entry</code> 将基消息的值与新字符串拼接，得到下面的地图列表。</p>
       <div className="resolved-value">森林地图,海洋地图,高山地图</div>
-      <p>这个结果需要同时用到 M1 和 M2。M2 更新得更晚，读取它时仍然需要 M1 的原始内容。</p>
+      <p>这个结果需要同时用到 M1 和 M2。M2 更新得更晚，却只保存了追加的部分；如果读取时只剩下 M2，就没有“森林地图,海洋地图”这段原始内容可供拼接。</p>
     </div>,
   },
   {
     title:'回收后基消息缺失', layout:'recycle-page',
     body:<div className="page-body">
       <p>接着发布 M3，删除“海洋地图”，再发布 M4，追加“高山地图”。两条增量消息都引用 M1，四条消息的时间依次递增。</p>
-      <p>默认存储只保留最近三条。四条写入后，下一次查询触发回收，M1 因为最旧而被删除；代码没有检查保留下来的 M4 是否还引用它。</p>
+      <p>Node 创建默认 SQLite 存储时，把历史保留数量设为 3。四条写入后，下一次查询触发回收，按时间留下 M2、M3、M4，删除最旧的 M1；这个筛选过程没有检查 M4 中的基消息 UUID。</p>
       <div className="retained-messages"><span className="removed">M1 <small>已删除</small></span><span>M2</span><span>M3</span><span>M4 <small>仍引用 M1</small></span></div>
       <Code file="LastWriteWinsResolver.merge()" hl={[1]} code={`if (baseMessage.isPresent()) {
     current.setValue(this.mergeValue(
         (IncrementalUpdateMessage) wins, baseMessage.get()));
 }`} />
-      <p>读取时虽然选中了 M4，却找不到 M1，上面的赋值不会执行。新建 Item 的值保持 <strong>null</strong>：最新的增量消息仍在，计算完整值需要的内容已经被删掉。</p>
+      <p>读取时选中了最新的 M4，再从剩下的历史中查找 M1。由于查找结果为空，上面的赋值不会执行，新建 Item 的值保持 <strong>null</strong>。M4 本身仍然存在，但它只有追加内容，计算完整值需要的 M1 已被回收。</p>
     </div>,
   },
   {
     title:'回到游戏中的两种结果', layout:'closing-page',
     body:<div className="page-body">
-      <p>回到游戏场景。管理端已经提交生命值 200，但如果消息发送失败，又提前记下了 B 的确认，B 就可能继续保留 100，而且被后续重试跳过。</p>
-      <p>地图列表的更新则暴露了另一处依赖：即使最新消息已经保存，只要它引用的基消息被回收，读取时仍然算不出完整配置。</p>
-      <p>沿源码追踪这两次更新，我们需要看到的不只是请求已经发出、最新消息已经写入，还包括<strong>接收结果如何进入同步进度，以及读取所需的历史是否仍然存在</strong>。</p>
-      <Worlds />
+      <p>回到最初的游戏场景。管理端只提交一次生命值 200，Ripple 将它保存成消息，再通过 Ripple服务端之间的同步和 Ripple客户端之间的转发，逐步送到使用这项配置的地图进程。</p>
+      <p>沿着这条路径，第一处问题出现在发送与确认之间。A 提交发送后立即记录 B 的确认；如果消息随后没有到达 B，B 仍然保留 100，而 Tracker 又会因为这个确认跳过 B。此时需要核对的是<strong>进度记录与实际接收结果是否一致</strong>。</p>
+      <p>第二处问题出现在历史回收与读取之间。地图列表的最新消息 M4 已经保存，但它引用的全量消息 M1 被删除。Resolver 找不到基消息，也就无法拼出完整列表。此时需要核对的是<strong>保留下来的历史是否足够重建当前值</strong>。</p>
+      <p>从对象协作来看，Node 把发送、进度记录、存储和合并交给了不同对象。逐个阅读这些方法后，还要把它们串回同一次更新：谁产生确认，谁使用确认；谁删除历史，谁又需要这段历史。这两处调用关系，就是本次源码阅读中最值得继续分析的地方。</p>
     </div>,
+  },
+  {
+    title:'致谢', layout:'thanks-page',
+    body:<div className="thanks-content"><p className="thanks-kicker">Ripple · 源码阅读与可靠性分析</p><h1>感谢聆听</h1><p className="thanks-invitation">欢迎提问与交流</p><p className="thanks-credit">盛泽辰 · 面向对象程序设计</p></div>,
   },
 ];
 
@@ -213,6 +218,7 @@ function readPage() {
 }
 
 export function Presentation() {
+  const reduceMotion = useReducedMotion();
   const [page, setPage] = useState(readPage);
   const [scale, setScale] = useState(1);
   const [fullscreen, setFullscreen] = useState(Boolean(document.fullscreenElement));
@@ -272,15 +278,17 @@ export function Presentation() {
     <div className="viewport" ref={viewport}
       onTouchStart={e => { touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }}
       onTouchEnd={e => { const s = touchStart.current; touchStart.current = null; if (!s || overview) return; const dx = e.changedTouches[0].clientX - s.x; const dy = e.changedTouches[0].clientY - s.y; if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) go(page + (dx < 0 ? 1 : -1)); }}>
-      <main className={`slide ${page === 0 ? 'cover-slide' : ''} ${slide.layout ?? ''}`} data-page={page} style={{ transform: `translate(-50%, -50%) scale(${scale})` }} aria-label={page === 0 ? '封面' : `第 ${page} 页，共 ${TOTAL_PAGES} 页`}>
-        {page === 0 ? (
-          <div className="slide-content" key={page}>{slide.body}</div>
-        ) : (
-          <div className="slide-content" key={page}>
+      <main className="slide" data-page={page} style={{ transform: `translate(-50%, -50%) scale(${scale})` }} aria-label={page === 0 ? '封面' : `第 ${page} 页，共 ${TOTAL_PAGES} 页`}>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div className={`slide-content ${slide.layout ?? ''}`} key={page} data-rendered-page={page}
+            initial={{ opacity: reduceMotion ? 1 : 0, y: reduceMotion ? 0 : 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: reduceMotion ? 0 : -5 }}
+            transition={{ duration: reduceMotion ? 0 : 0.18, ease: [0.22, 1, 0.36, 1] }}>
             {slide.heading && <header className="section-heading"><h1>{slide.heading}</h1></header>}
             {slide.body}
-          </div>
-        )}
+          </motion.div>
+        </AnimatePresence>
         <span className="page-number mono" aria-label="页码">{pageLabel}</span>
       </main>
       <nav className="controls" aria-label="演示控制">

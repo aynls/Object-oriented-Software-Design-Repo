@@ -1,6 +1,6 @@
 # Ripple 源码分析演示
 
-基于 React、TypeScript 和 Vite 的课程演示，共封面及 13 页正文。以史莱姆基础生命值从 100 调整为 200 的场景介绍 Ripple，并集中分析提前记录同步确认、历史回收破坏增量依赖两个问题。正文为 26–28px，仅在四处分节展示标题。
+基于 React、TypeScript 和 Vite 的课程演示，共封面、13 页正文及第 14 页致谢。以史莱姆基础生命值从 100 调整为 200 的场景介绍 Ripple，并集中分析提前记录同步确认、历史回收破坏增量依赖两个问题。正文为 23–24px，补充场景与源码调用之间的解释，仅在四处分节展示标题。第 13 页以文字收束分析。
 
 ## 本地运行
 
@@ -21,6 +21,8 @@ npm run dev
 
 页面采用 1440 × 810 的展示画布并按窗口等比例缩放。窗口、画布及全屏背景均为同一纯色。
 
+翻页使用 Motion 实现先淡出、后淡入的过渡，每段 180ms，并伴随轻微纵向位移。连续翻页时显示最终选择的页面；系统开启“减少动态效果”时直接切换。
+
 ## 编辑与构建
 
 `src/Presentation.tsx` 包含页面文案、示意图和交互；`src/style.css` 管理排版与配色。
@@ -31,6 +33,20 @@ npm run preview
 ```
 
 构建会先检查 TypeScript，再生成本地静态资源。项目不导出独立 HTML 文件。
+
+## 线上部署
+
+访问地址：https://arcsidera.dev/presentation/2026-10-23-ripple-review
+
+路径沿用现有 Trap 演示的 `/presentation/YYYY-MM-DD-name` 格式，使用不带 `www` 的域名。
+
+```powershell
+npm run deploy
+```
+
+该命令检查 TypeScript，按线上子路径构建资源，再通过 Wrangler 发布到独立的 `ripple-review` Worker。首次部署需先登录 Cloudflare 账户。仅构建时使用 `npm run build:cloudflare`。
+
+`wrangler.jsonc` 只绑定此演示的入口与下级资源路径。构建目录 `worker-dist/presentation/2026-10-23-ripple-review` 与线上路径对应；图片通过 Vite 的 `BASE_URL` 加载。本地开发仍使用原来的根路径。现有 Trap 演示和文档站继续由原 Worker 提供。
 
 ## 源码核对入口
 

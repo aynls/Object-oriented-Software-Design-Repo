@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ripple-review",
+  "account_id": "78f6155ae7fb177ca10e151df5e44439",
+  "compatibility_date": "2026-10-23",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "arcsidera.dev/presentation/2026-10-23-ripple-review",
+      "zone_name": "arcsidera.dev"
+    },
+    {
+      "pattern": "arcsidera.dev/presentation/2026-10-23-ripple-review/*",
+      "zone_name": "arcsidera.dev"
+    }
+  ],
+  "assets": {
+    "directory": "./worker-dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}
