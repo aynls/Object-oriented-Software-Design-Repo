@@ -32,13 +32,10 @@ p code { color:var(--accent-ink); font-size:.92em; overflow-wrap:anywhere; }
 .scene-page .page-body > p { font-size:23px; line-height:1.7; }
 .scene-page .worlds img { height:265px; }
 .scene-page .worlds figcaption { max-width:855px; }
-.value-change { padding:22px 0; }
-.config-key { color:var(--muted); font-family:Consolas,monospace; font-size:24px; }
-.value-change > div { display:flex; align-items:baseline; gap:48px; margin-top:8px; }
-.value-change strong,.old-value { font-size:84px; line-height:1.15; font-weight:600; font-variant-numeric:tabular-nums; }
-.old-value { color:#9a9ea5; }
-.value-change strong { color:var(--accent-ink); }
-.value-to { color:var(--muted); font-size:26px; }
+.value-change { padding:12px 0; }
+.config-key { color:var(--muted); font-family:Consolas,monospace; font-size:20px; }
+.value-change > div { display:flex; align-items:baseline; gap:12px; margin-top:10px; color:var(--ink-body); }
+.value-change strong,.old-value,.value-to { font-size:24px; line-height:1.75; font-weight:400; font-variant-numeric:tabular-nums; }
 .config-focus { background:white; padding:24px 32px; display:flex; flex-direction:column; gap:16px; border-radius:6px; font-size:23px; color:var(--muted); }
 .config-focus code { color:var(--accent-ink); font-size:28px; margin-left:28px; }
 .route { display:flex; gap:44px; margin:12px 0; }
