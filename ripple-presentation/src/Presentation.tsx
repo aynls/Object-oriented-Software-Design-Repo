@@ -205,47 +205,30 @@ this.reconnect(nodeList);`} />
     </div>,
   },
   {
-    title:'增量消息如何使用基消息', layout:'incremental-page',
+    title:'增量消息与历史回收', layout:'recycle-page',
     body:<div className="page-body">
-      <p>再看一项配置 <code>game / slime.spawnMaps</code>，它记录哪些地图允许生成史莱姆。管理端先发布全量消息 M1，之后希望把高山地图加入列表。</p>
+      <p>再看配置 <code>game / slime.spawnMaps</code>，它记录哪些地图允许生成史莱姆。管理端先发布全量消息 M1，再用增量消息 M2 追加高山地图。M2 保存追加内容和 M1 的 UUID，读取时需要找到 M1，才能拼出完整列表。</p>
       <div className="message-spec"><p><strong>M1</strong><span>全量消息</span><code>森林地图,海洋地图</code></p><p><strong>M2</strong><span>以 M1 为基消息</span><code>add_entry ",高山地图"</code></p></div>
-      <p>M2 只带追加的内容，以及 M1 的 UUID。读取时，Resolver 选出较新的 M2，按 UUID 找到 M1。源码中的 <code>add_entry</code> 将基消息的值与新字符串拼接，得到下面的地图列表。</p>
-      <div className="resolved-value">森林地图,海洋地图,高山地图</div>
-      <p>这个结果需要同时用到 M1 和 M2。M2 更新得更晚，却只保存了追加的部分；如果读取时只剩下 M2，就没有“森林地图,海洋地图”这段原始内容可供拼接。</p>
-    </div>,
-  },
-  {
-    title:'回收后基消息缺失', layout:'recycle-page',
-    body:<div className="page-body">
-      <p>接着发布 M3，删除“海洋地图”，再发布 M4，追加“高山地图”。两条增量消息都引用 M1，四条消息的时间依次递增。</p>
-      <p>Node 创建默认 SQLite 存储时，把历史保留数量设为 3。四条写入后，下一次查询触发回收，按时间留下 M2、M3、M4，删除最旧的 M1；这个筛选过程没有检查 M4 中的基消息 UUID。</p>
+      <p>接着发布 M3、M4，它们也都以 M1 为基消息，时间依次递增。Node 默认只保留三条历史消息；四条写入后，下一次查询触发回收，按时间留下 M2、M3、M4，删除最旧的 M1。</p>
       <div className="retained-messages"><span className="removed">M1 <small>已删除</small></span><span>M2</span><span>M3</span><span>M4 <small>仍引用 M1</small></span></div>
-      <Code file="LastWriteWinsResolver.merge()" hl={[1]} code={`if (baseMessage.isPresent()) {
-    current.setValue(this.mergeValue(
-        (IncrementalUpdateMessage) wins, baseMessage.get()));
-}`} />
-      <p>读取时选中了最新的 M4，再从剩下的历史中查找 M1。由于查找结果为空，上面的赋值不会执行，新建 Item 的值保持 <strong>null</strong>。M4 本身仍然存在，但它只有追加内容，计算完整值需要的 M1 已被回收。</p>
+      <p>读取时，LastWriteWinsResolver 选中最新的 M4，再按 UUID 查找 M1。它只在找到基消息后才合并并赋值；此时 M1 已经被删除，新建 Item 的值便保持 <strong>null</strong>。</p>
+      <p>回收策略按时间判断哪些消息可以删除，Resolver 却需要保留增量消息引用的基消息。两处各自完成了筛选和读取，但回收时没有检查这层引用关系，留下的最新消息也就无法还原完整配置。</p>
     </div>,
   },
   {
     title:'读取配置时承担的历史维护', layout:'maintenance-page',
     body:<div className="page-body">
-      <p>历史回收还会影响一次普通读取。假设现在通过 Ripple服务端的 <code>Node.getWithValue()</code> 查看史莱姆配置：它先取得 Item，再查询消息历史，最后交给 Resolver 计算值。进入两个存储方法，就能看到读取开始之前发生了什么。</p>
-      <Code file="SqliteItemService.getItem() 与 SqliteMessageService.findMessages() · 两处相同调用" code={`// TODO: Is it necessary to trigger recycling here
-this.getStorage().getRecycleStrategy().recycle(applicationName, key);`} />
-      <p><code>getItem()</code> 在查询配置身份前清理一次，<code>findMessages()</code> 在读取历史前又清理一次。每次 recycle() 都会查询回收前的 UUID、查询最近消息以确定时间边界、执行删除，再查询剩余 UUID，并为删除的消息清理 ACK。</p>
-      <p>因此，调用方只是要读出当前配置，却必须先等待这些维护操作。同一次读取还会重复进入清理流程；即使期间没有新增消息，也仍要重新查询和判断。这里的成本随读取请求产生，而调用方无法单独选择何时执行历史清理。</p>
-      <p>这也使读取带上了修改历史的副作用：前面 M1 被删除的过程，就可能发生在取值之前。写入路径同样会先调用 getItem()，所以它也承担清理工作。问题落在这组具体职责上：查询配置身份、取得历史和决定删除时机，被放进了同一条同步调用链。</p>
+      <p>历史回收还会影响一次普通读取。Ripple服务端读取史莱姆配置时，先查询配置项，再取得消息历史，最后计算当前值。前两个查询各自都会先触发一次历史清理，所以一次取值进入了两次清理流程。</p>
+      <p>每次清理都要查询已有消息、确定保留范围、删除旧记录，再清除对应的同步确认。即使两次清理之间没有新增消息，也会重复查询和判断。读取请求必须等待这些维护操作完成，才能取得配置值。</p>
+      <p>因此，读取频繁时，历史维护也随之反复执行；而前一页基消息被删除的过程，还可能发生在计算当前值之前。把清理放进查询方法，使一次普通读取同时承担了维护开销和修改历史的副作用。</p>
     </div>,
   },
   {
-    title:'从一次更新看对象之间的协作', layout:'closing-page',
+    title:'总结', heading:'总结', layout:'closing-page',
     body:<div className="page-body">
-      <p>回到最初的游戏场景。管理端只提交一次生命值 200，Ripple 将它保存成消息，再通过 Ripple服务端之间的同步和 Ripple客户端之间的转发，逐步送到使用这项配置的地图进程。</p>
-      <p>A 提交发送就记录 B 的确认，Tracker 随后用这个记录筛掉重试目标。B 将消息交给 C2 后，C3 的接收结果又没有进入这份进度。把两段代码连起来，才能看出为什么一次更新已经向下传播，海洋地图却仍可能停在旧值。</p>
-      <p>重启使这条路径更长：Ripple服务端重新连接后，需要依靠仍保留的消息和进度补发，再恢复订阅登记，才能继续通知地图进程。这里每一步使用的数据，都来自前面另一个对象保存的状态。</p>
-      <p>历史回收也存在这样的联系。Resolver 读取 M4 时需要 M1，回收策略却只按时间选择记录；而执行回收的入口又放在 getItem() 和 findMessages() 中，让一次读取同时承担重复清理和删除历史的工作。</p>
-      <p>源码已经用 Storage、Overlay、ClientDispatcher、Tracker 和 Resolver 拆分了职责。沿同一条配置更新检查它们的调用关系，可以具体看到：发送结果是否进入进度、漏收是否留下补发依据、删除是否保留读取依赖，以及维护工作由哪一次操作承担。</p>
+      <p>从史莱姆生命值由 100 调整到 200 出发，我们看到了 Ripple 的作用：管理端统一提交配置，地图进程登记订阅，更新经过保存、同步和转发，逐步到达使用它的进程。</p>
+      <p>源码用不同对象承担这些工作：Node 协调请求，Storage 保存消息，Overlay 选择同步目标，ClientDispatcher 分发通知，Tracker 记录进度，Resolver 计算当前值。沿一次更新阅读，便能把这些类与实际执行过程联系起来。</p>
+      <p>后半段分析了确认与实际接收之间的差异、漏收后的恢复条件、增量消息对历史的依赖，以及读取承担的清理开销。这些问题共同说明，评价对象之间的协作，还需要追踪一次操作完成后留下什么状态，以及后续对象如何使用这些状态。</p>
     </div>,
   },
   {
